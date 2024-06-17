@@ -55,11 +55,16 @@ def import_json_files(directory,commentDBT):
                 with open(filepath, 'r') as file:
                     data = json.load(file)
                     commentId = data['data']['id']
+
+                    comment_text = strip_tags(data['data']['attributes']['comment'])
+                    comment_text = ' '.join(comment_text.split()) #Clever whitespace removal from https://stackoverflow.com/a/2077944/144364
+
+
                     #WE doing this the SQL alchemy way because there are gonna be hella strange text...
                     stmt = db.insert(commentTable).values(
                         commentId = commentId,
                         comment_on_documentId = data['data']['attributes']['commentOnDocumentId'],
-                        comment_text = strip_tags(data['data']['attributes']['comment']),
+                        comment_text = comment_text,
                         comment_date_text = data['data']['attributes']['modifyDate'],
                         ).prefix_with('IGNORE')
 
