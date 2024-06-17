@@ -9,6 +9,28 @@ import sys
 import sqlalchemy as db
 
 
+from io import StringIO
+from html.parser import HTMLParser
+
+
+# From https://stackoverflow.com/a/925630/144364
+class MLStripper(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.reset()
+        self.strict = False
+        self.convert_charrefs= True
+        self.text = StringIO()
+    def handle_data(self, d):
+        self.text.write(d)
+    def get_data(self):
+        return self.text.getvalue()
+
+def strip_tags(html):
+    s = MLStripper()
+    s.feed(html)
+    return s.get_data()
+
 
 
 
@@ -37,7 +59,7 @@ def import_json_files(directory,commentDBT):
                     stmt = db.insert(commentTable).values(
                         commentId = commentId,
                         comment_on_documentId = data['data']['attributes']['commentOnDocumentId'],
-                        comment_text = data['data']['attributes']['comment'],
+                        comment_text = strip_tags(data['data']['attributes']['comment']),
                         comment_date_text = data['data']['attributes']['modifyDate'],
                         ).prefix_with('IGNORE')
 
