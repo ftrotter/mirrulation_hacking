@@ -1,4 +1,4 @@
-# ft_python_template
+# Mirrulation Data Hacking
 some useful things that I like to have for my simple python projects
 
 * the schema to the database is db.sql
