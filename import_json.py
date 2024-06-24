@@ -58,7 +58,8 @@ def import_json_files(directory,commentDBT):
 
                     comment_text = strip_tags(data['data']['attributes']['comment'])
                     comment_text = ' '.join(comment_text.split()) #Clever whitespace removal from https://stackoverflow.com/a/2077944/144364
-
+                    # This does result in some weirdly compressed sentences and paragraphs..
+                    # But it also resolves lots of text differences? Is it worth it? you decide...
 
                     #WE doing this the SQL alchemy way because there are gonna be hella strange text...
                     stmt = db.insert(commentTable).values(
