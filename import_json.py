@@ -7,7 +7,7 @@ import os
 import json
 import sys
 import sqlalchemy as db
-
+import re
 
 from io import StringIO
 from html.parser import HTMLParser
@@ -56,16 +56,23 @@ def import_json_files(directory,commentDBT):
                     data = json.load(file)
                     commentId = data['data']['id']
 
+                    #This is the only one we will do for the raw version of the comment...
                     comment_text = strip_tags(data['data']['attributes']['comment'])
-                    comment_text = ' '.join(comment_text.split()) #Clever whitespace removal from https://stackoverflow.com/a/2077944/144364
+
+                    #lets do some simplification of our text.
+                    simplified_comment_text = ' '.join(comment_text.split(' ')) #Clever whitespace removal from https://stackoverflow.com/a/2077944/144364
                     # This does result in some weirdly compressed sentences and paragraphs..
                     # But it also resolves lots of text differences? Is it worth it? you decide...
+
+                    # placing each sentence on its own line makes life easier for diff display
+                    simplified_comment_text = re.sub(r'([.?!])', r'\1\n', simplified_comment_text)
 
                     #WE doing this the SQL alchemy way because there are gonna be hella strange text...
                     stmt = db.insert(commentTable).values(
                         commentId = commentId,
                         comment_on_documentId = data['data']['attributes']['commentOnDocumentId'],
                         comment_text = comment_text,
+                        simplified_comment_text = simplified_comment_text,
                         comment_date_text = data['data']['attributes']['modifyDate'],
                         ).prefix_with('IGNORE')
 
