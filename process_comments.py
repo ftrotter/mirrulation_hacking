@@ -42,7 +42,7 @@ if __name__ == "__main__":
     commentDBT = myDBTable.myDBTable(m_db,comment_table)
 
     unique_comment_DBT = myDBTable.myDBTable(m_db,'unique_comment')
-
+    cluster_DBT = myDBTable.myDBTable(m_db,'comment_clusters')
 
 #    if len(sys.argv) < 2:
 #        print("Usage: python import_json.py <directory_path>")
@@ -65,7 +65,8 @@ ORDER BY comment_count DESC
 
     sql_dict['add an id as the prrimary key'] = f"ALTER TABLE {unique_comment_DBT}  ADD `id` INT(11) NOT NULL AUTO_INCREMENT  FIRST,  ADD   PRIMARY KEY  (`id`);"    
     
-    #sql_dict['clear the comment cluster table'] = f"TRUNCATE TABLE {unique_comment_DBT}"
+    sql_dict['clear the comment cluster table'] = f"TRUNCATE TABLE {cluster_DBT}"
+
 
 
     SQLh = mySQLh.mySQLh()
@@ -86,6 +87,7 @@ ORDER BY comment_count DESC
     # At what score should we say "these are basically the same?"
     threshold = .85
 
+    list_of_done = []
 
     outer_i = 0        
     for outside_row in all_unique_comments:
@@ -100,29 +102,40 @@ ORDER BY comment_count DESC
             if(score > threshold):
                 o_id = outside_row.id
                 i_id = inside_row.id
-                matching_string = f"Match between {o_id} and {i_id}"
-                print(matching_string)
-                print(outside_row.simplified_comment_text[:70])
-                print(inside_row.simplified_comment_text[:70])
-                print(f"Score: {score}")
-                if (o_id != i_id):
-                    difflist = unified_diff(outside_row.simplified_comment_text.splitlines(),inside_row.simplified_comment_text.splitlines())
-                    diff_text = "\n".join(list(difflist)) 
-                    e_diff_text = MySQLdb.escape_string(diff_text).decode('utf-8')
-                    sql_dict[matching_string] = f"""
-INSERT INTO `comment_clusters` 
+                if i_id in list_of_done:
+                    #This is already done.. in the outer loop
+                    pass
+                else:
+                    matching_string = f"Match between {o_id} and {i_id}"
+                    print(matching_string)
+                    print(outside_row.simplified_comment_text[:70])
+                    print(inside_row.simplified_comment_text[:70])
+                    print(f"Score: {score}")
+                    if (o_id != i_id):
+                        #difflist = unified_diff(outside_row.simplified_comment_text.splitlines(),inside_row.simplified_comment_text.splitlines())
+                        #diff_text = "\n".join(list(difflist)) 
+                        #e_diff_text = MySQLdb.escape_string(diff_text).decode('utf-8')
+
+                        #lets not calculate the diff text for now...
+                        #Anything to speed this up..
+                    
+                        sql_dict[matching_string] = f"""
+INSERT INTO {cluster_DBT}
 (`unique_comment_id`, `other_unique_comment_id`, `score`, `diff_text`) 
-VALUES ('{o_id}', '{i_id}', '{score}', 
-
-'{e_diff_text}' 
-
+VALUES ('{o_id}', '{i_id}', '{score}', NULL 
 );
 
 """
-                else:
-                    print("Everything always matches itself")
+                    else:
+                        print("Everything always matches itself")
 
+
+                
+        
         # This will run on every outside loop
+        # Save the data..
         SQLh.runQuerys(sql_dict,is_just_print)
         sql_dict = WriteOnceDict.WriteOnceDict()
 
+        # Add the outer row to the done list
+        list_of_done.append(o_id)
