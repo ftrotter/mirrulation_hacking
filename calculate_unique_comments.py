@@ -33,19 +33,27 @@ if __name__ == "__main__":
 
     sql_dict = WriteOnceDict.WriteOnceDict()
 
+    sql_dict['update the md5 on the comment field'] = f""" 
+UPDATE  mirrulation.comment
+SET `simplified_comment_text_md5` = MD5(`simplified_comment_text`)
+"""
+
     sql_dict['drop unique table'] = f"DROP TABLE IF EXISTS {unique_comment_DBT}"
 
     sql_dict['create unique table']  =  f"""
 CREATE TABLE {unique_comment_DBT}
 SELECT 
+    simplified_comment_text_md5,
     simplified_comment_text,
     COUNT(DISTINCT(commentId)) AS comment_count
 FROM {commentDBT}
-GROUP BY simplified_comment_text
+GROUP BY simplified_comment_text_md5
 ORDER BY comment_count DESC
 """ 
 
-    sql_dict['add an id as the prrimary key'] = f"ALTER TABLE {unique_comment_DBT}  ADD `id` INT(11) NOT NULL AUTO_INCREMENT  FIRST,  ADD   PRIMARY KEY  (`id`);"    
+    sql_dict['add an id as the primary key'] = f"ALTER TABLE {unique_comment_DBT}  ADD `id` INT(11) NOT NULL AUTO_INCREMENT  FIRST,  ADD   PRIMARY KEY  (`id`);"    
+
+    sql_dict['index the md5'] = f"ALTER TABLE {unique_comment_DBT} ADD UNIQUE(`simplified_comment_text_md5`); "
 
     sql_dict['drop the unique to comment map'] = f"DROP TABLE IF EXISTS {unique_to_comment_DBT}"
 
@@ -57,8 +65,8 @@ SELECT
 
 FROM  {unique_comment_DBT} AS uniquecomment 
 JOIN {commentDBT} AS acomment ON 
-    acomment.simplified_comment_text = 
-    uniquecomment.simplified_comment_text
+    acomment.simplified_comment_text_md5 = 
+    uniquecomment.simplified_comment_text_md5
 ORDER BY acomment.id, uniquecomment.id
 """
 
