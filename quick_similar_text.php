@@ -9,6 +9,8 @@
 
 	$search_depth = 500;
 
+	$batch_size = 100;
+
 	require_once("./util/loader.php");
 	require_once("./util/run_sql_loop.function.php");
 
@@ -47,12 +49,15 @@ SELECT
 	id,
     simplified_comment_text
 FROM mirrulation.uniquecomment 
-LEFT JOIN mirrulation.uniquecomment_cluster ON
-	uniquecomment.id =
-    	uniquecomment_cluster.unique_comment_id
-WHERE uniquecomment_cluster.unique_comment_id IS NULL
+LEFT JOIN mirrulation.uniquecomment_cluster AS first_cluster ON
+		uniquecomment.id =
+    	first_cluster.unique_comment_id
+LEFT JOIN mirrulation.uniquecomment_cluster AS second_cluster ON
+		uniquecomment.id =
+    	second_cluster.unique_comment_id		
+WHERE first_cluster.unique_comment_id IS NULL AND second_cluster.unique_comment_id IS NULL
 ORDER BY RAND()
-LIMIT 1,1000;
+LIMIT 1,$batch_size;
 ";
 
 	$result = f_mysql_query($get_random_comments_sql);
@@ -61,6 +66,8 @@ LIMIT 1,1000;
 
 	#Now we loop over or unprocessed comments... until we find a match!!
 	while($row = f_mysql_fetch_assoc($result)){
+
+		$finished_this_one = false;
 
 		$id = $row['id'];
 		$this_comment = $row['simplified_comment_text'];
@@ -75,26 +82,31 @@ LIMIT 1,1000;
 				#Then we have a match.. lets remember to save it!!
 
 				$sql["insert one links for $id"] = "
-INSERT INTO mirrulation.uniquecomment_cluster 
+INSERT IGNORE INTO mirrulation.uniquecomment_cluster 
 	(`unique_comment_id`, `other_unique_comment_id`, `score`, `diff_text`) 
 VALUES ('$id', '$other_side_id', '$percent_score', NULL);
 ";
 				echo "Found one.\n";
+				$finished_this_one = true;
 				break;
 
 			}
 
 			if($i > $search_depth){
 				echo "No early matches. skipping...\n";
+				$finished_this_one = true;
 				break;
 			}
 
 		}
 
+		if(!$finished_this_one){
+			print("Got to the end of the search and found no matches. Moving on\n")
+
+		}
+
 	}
 
-	var_export($sql);
-	exit();
 
 	$also_print_sql = true;
 	run_sql_loop($sql,$also_print_sql);
