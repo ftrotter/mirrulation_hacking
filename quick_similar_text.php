@@ -101,8 +101,7 @@ VALUES ('$id', '$other_side_id', '$percent_score', NULL);
 		}
 
 		if(!$finished_this_one){
-			print("Got to the end of the search and found no matches. Moving on\n")
-
+			print("Got to the end of the search and found no matches. Moving on\n");
 		}
 
 	}
