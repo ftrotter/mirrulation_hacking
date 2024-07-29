@@ -7,10 +7,10 @@
 	$threshold_percent = 80; # if the percent match from similar_text is higher than this.. it will be called a match
 					# for reference https://www.php.net/manual/en/function.similar-text.php
 
-	$search_depth = 1000;
+	$search_depth = 500;
 
-	$batch_size = 1000;
-	$save_batch_size = 100;
+	$batch_size = 300;
+	$save_batch_size = 50;
 
 	require_once("./util/loader.php");
 	require_once("./util/run_sql_loop.function.php");
@@ -67,61 +67,67 @@ ORDER BY RAND()
 LIMIT 1,$batch_size;
 ";
 
-	$result = f_mysql_query($get_random_comments_sql);
+	$still_more_rows = true;
 
-	$sql = [];
+	while($still_more_rows){
 
-	#Now we loop over or unprocessed comments... until we find a match!!
-	while($row = f_mysql_fetch_assoc($result)){
+		$result = f_mysql_query($get_random_comments_sql);
 
-		$finished_this_one = false;
+		$sql = [];
 
-		$id = $row['id'];
-		$this_comment = $row['simplified_comment_text'];
-		echo "$id:\n";
-		$i = 0;
-		foreach($all_comments as $other_side_id => $other_side_comment){
-			$i++;
-			echo ".";
-			$int_score = similar_text($this_comment,$other_side_comment,$percent_score);
+		$still_more_rows = false;
+		#Now we loop over or unprocessed comments... until we find a match!!
+		while($row = f_mysql_fetch_assoc($result)){
+			$still_more_rows = true;
+			$finished_this_one = false;
 
-			if($percent_score > $threshold_percent){
-				#Then we have a match.. lets remember to save it!!
+			$id = $row['id'];
+			$this_comment = $row['simplified_comment_text'];
+			echo "$id:\n";
+			$i = 0;
+			foreach($all_comments as $other_side_id => $other_side_comment){
+				$i++;
+				echo ".";
+				$int_score = similar_text($this_comment,$other_side_comment,$percent_score);
 
-				$sql["insert one links for $id"] = "
-INSERT IGNORE INTO mirrulation.uniquecomment_cluster 
-	(`unique_comment_id`, `other_unique_comment_id`, `score`, `diff_text`) 
-VALUES ('$id', '$other_side_id', '$percent_score', NULL);
-";
-				echo "Found one.\n";
-				$finished_this_one = true;
-				break;
+				if($percent_score > $threshold_percent){
+					#Then we have a match.. lets remember to save it!!
+
+					$sql["insert one links for $id"] = "
+	INSERT IGNORE INTO mirrulation.uniquecomment_cluster 
+		(`unique_comment_id`, `other_unique_comment_id`, `score`, `diff_text`) 
+	VALUES ('$id', '$other_side_id', '$percent_score', NULL);
+	";
+					echo "Found one.\n";
+					$finished_this_one = true;
+					break;
+
+				}
+
+				if($i > $search_depth){
+					echo "No early matches. skipping...\n";
+					$sql["mark $id as lonely"] = "INSERT IGNORE INTO mirrulation.uniquecomment_lonely (`uniquecomment_id`) VALUES ('$id');";
+					$finished_this_one = true;
+					break;
+				}
 
 			}
 
-			if($i > $search_depth){
-				echo "No early matches. skipping...\n";
-				$sql["mark $id as lonely"] = "INSERT INTO mirrulation.uniquecomment_lonely (`uniquecomment_id`) VALUES ('$id');";
-				$finished_this_one = true;
-				break;
+			if(!$finished_this_one){
+				print("Got to the end of the search and found no matches. Moving on\n");
+			}
+
+			if(count($sql) > $save_batch_size){
+				#save to the database... 
+				$also_print_sql = true;
+				run_sql_loop($sql,$also_print_sql);
+				$sql = [];
+
 			}
 
 		}
 
-		if(!$finished_this_one){
-			print("Got to the end of the search and found no matches. Moving on\n");
-		}
+	} //end while still more rows..
 
-		if(count($sql) > $save_batch_size){
-			#save to the database... 
-			$also_print_sql = true;
-			run_sql_loop($sql,$also_print_sql);
-			$sql = [];
-
-		}
-
-	}
-
-
-
+	echo "All done.\n";
 	
