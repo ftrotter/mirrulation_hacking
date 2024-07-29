@@ -7,9 +7,10 @@
 	$threshold_percent = 80; # if the percent match from similar_text is higher than this.. it will be called a match
 					# for reference https://www.php.net/manual/en/function.similar-text.php
 
-	$search_depth = 500;
+	$search_depth = 1000;
 
-	$batch_size = 100;
+	$batch_size = 1000;
+	$save_batch_size = 100;
 
 	require_once("./util/loader.php");
 	require_once("./util/run_sql_loop.function.php");
@@ -55,7 +56,13 @@ LEFT JOIN mirrulation.uniquecomment_cluster AS first_cluster ON
 LEFT JOIN mirrulation.uniquecomment_cluster AS second_cluster ON
 		uniquecomment.id =
     	second_cluster.unique_comment_id		
-WHERE first_cluster.unique_comment_id IS NULL AND second_cluster.unique_comment_id IS NULL
+LEFT JOIN mirrulation.uniquecomment_lonely ON 
+		uniquecomment_lonely.uniquecomment_id =
+		uniquecomment.id 
+WHERE 
+	first_cluster.unique_comment_id IS NULL 
+	AND second_cluster.unique_comment_id IS NULL
+	AND uniquecomment_lonely.uniquecomment_id IS NULL
 ORDER BY RAND()
 LIMIT 1,$batch_size;
 ";
@@ -94,6 +101,7 @@ VALUES ('$id', '$other_side_id', '$percent_score', NULL);
 
 			if($i > $search_depth){
 				echo "No early matches. skipping...\n";
+				$sql["mark $id as lonely"] = "INSERT INTO mirrulation.uniquecomment_lonely (`uniquecomment_id`) VALUES ('$id');";
 				$finished_this_one = true;
 				break;
 			}
@@ -104,9 +112,16 @@ VALUES ('$id', '$other_side_id', '$percent_score', NULL);
 			print("Got to the end of the search and found no matches. Moving on\n");
 		}
 
+		if(count($sql) > $save_batch_size){
+			#save to the database... 
+			$also_print_sql = true;
+			run_sql_loop($sql,$also_print_sql);
+			$sql = [];
+
+		}
+
 	}
 
 
-	$also_print_sql = true;
-	run_sql_loop($sql,$also_print_sql);
+
 	
