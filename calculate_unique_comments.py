@@ -40,9 +40,11 @@ SET `simplified_comment_text_md5` = MD5(`simplified_comment_text`)
 
     sql_dict['drop unique table'] = f"DROP TABLE IF EXISTS {unique_comment_DBT}"
 
+    spaces = '                                                     '
+    # Lots of spaces because we want to support very long wayback machine urls.
     sql_dict['create unique table']  =  f"""
 CREATE TABLE {unique_comment_DBT}
-SELECT 
+SELECT
     simplified_comment_text_md5,
     simplified_comment_text,
     COUNT(DISTINCT(commentId)) AS comment_count
