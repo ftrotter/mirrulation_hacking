@@ -45,7 +45,7 @@ def import_json_files(directory,commentDBT):
     meta_data = db.MetaData(bind=SQLh._engine)
     db.MetaData.reflect(meta_data)
 
-    commentTable = meta_data.tables['comment']
+    commentTable = meta_data.tables['comment_json']
 
     
     for filename in os.listdir(directory):
@@ -92,7 +92,7 @@ def import_json_files(directory,commentDBT):
 if __name__ == "__main__":
 
     m_db = 'mirrulation'
-    comment_table = 'comment'
+    comment_table = 'comment_json'
     commentDBT = myDBTable.myDBTable(m_db,comment_table)
 
 
