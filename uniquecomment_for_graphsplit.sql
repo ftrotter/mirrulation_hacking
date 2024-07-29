@@ -1,8 +1,10 @@
 SELECT 
     `unique_comment_id` AS node_a, 
     left_comment.simplified_comment_text_md5 AS node_a_name,
+    'uniquecomment' AS node_a_type,
     `other_unique_comment_id` AS node_b, 
     right_comment.simplified_comment_text_md5 AS node_b_name,
+    'uniquecomment' AS node_b_type,
     `score` AS weight
 FROM mirrulation.uniquecomment_cluster AS cluster
 JOIN mirrulation.uniquecomment AS left_comment ON 
