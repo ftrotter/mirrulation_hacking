@@ -1,4 +1,54 @@
-# A script that will decompose a graph into its parts using the igraph library
+"""
+clustering_comments_graphs_split.py
+
+Purpose:
+    This script processes a graph of related comments by decomposing it into distinct subgraphs (clusters).
+    It reads edge and node data from a MySQL database, constructs an igraph Graph object, decomposes it 
+    into connected components, and writes the results back to a specified database table.
+
+Requirements:
+    - Python libraries: igraph, pymysql, dotenv, sqlalchemy, pureyaml
+    - MySQL database connection
+    - Configuration file: util/db.yaml containing MySQL credentials
+    - Input SQL file that defines the graph structure
+
+Usage:
+    python clustering_comments_graphs_split.py <sql_file> <dest_db> <dest_table>
+
+Arguments:
+    sql_file    : Path to SQL file containing the query that loads the graph data
+    dest_db     : Destination database name (default: 'munge_esse')
+    dest_table  : Destination table name (default: 'SG')
+
+Input SQL Requirements:
+    The SQL query should return rows with the following columns:
+    - node_a: First node identifier
+    - node_b: Second node identifier
+    - node_a_name: Name of first node
+    - node_b_name: Name of second node
+    - node_a_type: Type of first node
+    - node_b_type: Type of second node
+
+Output Table Structure:
+    The script creates a table with the following columns:
+    - node: VARCHAR(255) - Node identifier
+    - node_name: VARCHAR(255) - Node name
+    - node_type: VARCHAR(255) - Node type
+    - esse_id: INT(11) - Subgraph identifier
+
+Memory Management:
+    The script includes memory usage tracking using the resource module.
+    Progress indicators are printed every 10,000 records processed.
+
+Process Flow:
+    1. Validates command line arguments
+    2. Sets up destination database table
+    3. Reads graph data from source query
+    4. Constructs igraph Graph object
+    5. Decomposes graph into connected components
+    6. Writes subgraph data to destination table
+    7. Cleans up node names (removes 'n' prefix)
+"""
 
 import igraph
 from trottertools.WriteOnceDict import WriteOnceDict
@@ -18,16 +68,24 @@ import os.path
 
 
 def memory_usage_resource():
+    """
+    Get current memory usage in a platform-independent way.
+    
+    Returns:
+        str: Memory usage in appropriate units (KB on Linux, MB on macOS)
+    """
     rusage_denom = 1024
     if sys.platform == 'darwin':
-        # ... it seems that in OSX the output is different units ...
+        # On macOS, ru_maxrss is in bytes, need to convert to MB
         rusage_denom = rusage_denom * rusage_denom
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / rusage_denom
     return str(mem)
 
+# Load MySQL configuration from YAML file
 mysql_config_file = open(os.path.dirname(os.path.abspath(__file__)) + "/util/db.yaml");
 mysql_config = pureyaml.load(mysql_config_file.read())
 
+# Initialize database connection
 db = pymysql.connect(	host=mysql_config['mysql_host'],
 			user=mysql_config['mysql_user'],
 			password=mysql_config['mysql_password'],
@@ -38,19 +96,14 @@ db = pymysql.connect(	host=mysql_config['mysql_host'],
 try:
 	sql = []
 	with db.cursor() as cursor:
-		#the reason I put an 'n' in front of the node names is that this prevents
-		# igraph from using the npi numbers as node identifiers below...
-		#there is obviously a better way to do this.	
-
+		# Validate command line arguments
 		if(len(sys.argv) != 4):
 			print('I need three arguments. the name of the .sql file that loads the graph, the database and table name to put the output into');
 			sys.exit()
 
-
-		#these are the default source and destination table...
+		# Set default and override destination settings
 		dest_db = 'munge_esse'
 		dest_table = 'SG'
-		#accept a source and destination table from the command line... if it is given...
 		if len(sys.argv) > 1:
 			sql_file_name = sys.argv[1]
 			if len(sys.argv) > 2:
@@ -60,29 +113,31 @@ try:
 
 		print('sql_file_name:' + str(sql_file_name) + ' dest_db:' + str(dest_db) + ' dest_table:' + dest_table);
 
+		# Read SQL query from file
 		this_sql = open(sql_file_name, 'r').read()
 
-		#drop the output table
+		# Initialize destination table
 		drop_sql = "DROP TABLE IF EXISTS %(DB)s.%(DEST_TABLE)s" % {"DEST_TABLE": dest_table, "DB": dest_db}
 		cursor.execute(drop_sql);
-		#create a new output table
 		create_sql = "CREATE TABLE %(DB)s.%(DEST_TABLE)s (`node` varchar(255) DEFAULT NULL,`node_name` varchar(255), `node_type` varchar(255), `esse_id` int(11) NOT NULL) ENGINE=MyISAM DEFAULT CHARSET=latin1;" % {"DEST_TABLE": dest_table, 'DB': dest_db}
 		cursor.execute(create_sql);
-		#index the output table
 		index_sql = "ALTER TABLE %(DB)s.%(DEST_TABLE)s ADD INDEX (`node`,`esse_id`);" % {"DEST_TABLE": dest_table, 'DB': dest_db}
 		cursor.execute(index_sql);
 
 		print('Destination table blanked, created and indexed. Running query..');
 
+		# Data structures for graph construction
 		all_nodes = {}
 		all_edges = []
 
-
+		# Execute source query and fetch results
 		cursor.execute(this_sql)
 		results = cursor.fetchall()
 		
+		# Initialize igraph Graph object
 		g = igraph.Graph()
 
+		# Process query results into graph structure
 		i = 0;
 		print('processing data...')
 		print('Memory usage: ' + memory_usage_resource())
@@ -94,6 +149,7 @@ try:
 			if((i % 10000) == 0):
 				print('.: '+str(i))
 
+		# Add vertices to graph
 		print('Memory usage: ' + memory_usage_resource())
 		i = 0;
 		for this_node_name in all_nodes:
@@ -109,18 +165,15 @@ try:
 		print('Starting bulk edge import')
 		i = 0;
 		print(g);
-		# for whatever reason, this function does not seem capable of 
-		# getting integers as output variables... it trys to use them 	
-		# as the internal numbers that idetify nodes... and crashes
-		# this is the reason for putting the 'n' in front of the node names 
+		# Add edges to graph
+		# Note: node names need 'n' prefix to prevent igraph from using numeric IDs as internal identifiers
 		g.add_edges(all_edges)
-
-		#Graph is fully built in memory at this point...
 
 		print('')
 		print('Memory usage: ' + memory_usage_resource())
 		print('Starting decomposition')
 
+		# Decompose graph into connected components
 		sub_graph_list = g.decompose()
 
 		print('')
@@ -128,6 +181,7 @@ try:
 		print('Total subgraphs:')
 		print(len(sub_graph_list))
 
+		# Process and store subgraphs
 		for esse_id, this_sub_graph in enumerate(sub_graph_list):
 			#What I really wish I could do is have a different data field instead of the name field
 			#That way when I wrote the data out I would not have an 'n' in from of anything
@@ -143,35 +197,28 @@ try:
 			insert_sql_start = "INSERT IGNORE INTO %(DB)s.%(DEST_TABLE)s VALUES " % {'DB': dest_db, 'DEST_TABLE': dest_table}
 			insert_sql = insert_sql_start
 			i = 0
+			# Process nodes in current subgraph
 			for this_node in this_sub_graph.vs:
 				i = i + 1
-				#insert_sql += comma + "( '"+ str(this_node['node_id']) + "', '" + str(this_node['name']) + "','" + str(this_node['node_type']) + "', '" + str(esse_id) + "')"
-				# This does not work, need another way to access the node_id...
 				insert_sql += comma + "( NULL, '" + str(this_node['name']) + "','" + str(this_node['node_type']) + "', '" + str(esse_id) + "')"
 				comma = ','
+				# Batch inserts in groups of 1000
 				if(i > 1000):
-					#lets do a write to the db.
 					cursor.execute(insert_sql)
-					#now lets start the whole sql insert from scratch for the next 1000
 					insert_sql = insert_sql_start
 					comma = ''
 					i = 0
 					sys.stdout.write('w')
 
-			#all done with the loop, lets run the last insert_sql
+			# Execute final batch for current subgraph
 			cursor.execute(insert_sql)
 			sys.stdout.write('wl')
 
-		#now lets get rid of those n in the node names
+		# Clean up node names by removing 'n' prefix
 		clean_sql = "UPDATE %(DB)s.%(DEST_TABLE)s SET node = SUBSTR(node_name,3), node_name = SUBSTR(node_name,3)" % {'DB': dest_db, 'DEST_TABLE': dest_table}
 		cursor.execute(clean_sql)
 		
 finally:
-
 	print('')
 	db.close()
 	print('all done. finally over')
-
-
-
-
