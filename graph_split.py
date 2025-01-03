@@ -1,4 +1,5 @@
-# A script that will decompose a graph into its parts
+# A script that will decompose a graph into its parts using the igraph library
+
 import igraph
 from trottertools.WriteOnceDict import WriteOnceDict
 from trottertools.myDBTable import myDBTable
